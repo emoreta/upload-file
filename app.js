@@ -3,7 +3,6 @@ const express = require("express");
 const fileUpload = require("express-fileupload");
 const path = require("path");
 var cors = require('cors');
-require('dotenv').config();
 
 const filesPayloadExists = require('./middleware/filesPayloadExists');
 const fileExtLimiter = require('./middleware/fileExtLimiter');
@@ -13,9 +12,8 @@ const PORT = process.env.PORT || 3500;
 const url = process.env.URL
 
 const app = express();
-app.use(express.json({ limit: '50mb' })); 
-app.use(express.urlencoded({ extended: true, limit: '50mb' })); 
-
+app.use(express.json({ limit: '50mb' }));   // Para datos JSON
+app.use(express.urlencoded({ limit: '50mb', extended: true }));  // Para formularios
 
 app.use(cors({
     origin: '*'
@@ -56,9 +54,9 @@ app.post('/save-json', (req, res) => {
 
     try {
         const jsonData = JSON.parse(jsonString);
-        const filePath = path.join(__dirname, pathFile, `${fileName}.json`);
+        const filePath = path.join(__dirname, pathFile, `${fileName}`);
         fs.writeFileSync(filePath, JSON.stringify(jsonData, null, 2), 'utf8');
-        res.json({ status: "success",url:url+pathFile+"/"+fileName+".json", message: `Archivo ${fileName}.json guardado correctamente.` });
+        res.json({ status: "success",url:"https://upload.guabastudio.site/"+pathFile+"/"+fileName, message: `Archivo ${fileName} guardado correctamente.` });
     } catch (error) {
         res.status(500).json({ status: "error", message: "Error al procesar el JSON.", details: error.message });
     }
