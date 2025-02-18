@@ -1,5 +1,5 @@
 ---
 deployment:
   tasks:
-    - export DEPLOYPATH=/home/ukmhqynpwn/repositories/upload-file
+    - export DEPLOYPATH=/home/ukmhqynpwn/upload.guabastudio.site
     - /bin/cp -r * $DEPLOYPATH
