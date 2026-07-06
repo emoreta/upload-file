@@ -1,7 +1,8 @@
 const filesPayloadExists = (req, res, next) => {
-    if (!req.files) return res.status(400).json({ status: "error", message: "Missing files" })
+  if (!req.files || Object.keys(req.files).length === 0) {
+    return res.status(400).json({ status: 'error', message: 'No se envió ningún archivo.' });
+  }
+  next();
+};
 
-    next()
-}
-
-module.exports = filesPayloadExists
+module.exports = filesPayloadExists;
