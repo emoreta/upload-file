@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Test</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f1f5f9; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+        .card { background: #fff; border-radius: 16px; padding: 32px; width: 100%; max-width: 480px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); }
+        h1 { font-size: 22px; color: #0f172a; margin-bottom: 4px; }
+        p { color: #64748b; font-size: 14px; margin-bottom: 24px; }
+        .drop-zone { border: 2px dashed #e2e8f0; border-radius: 12px; padding: 40px 20px; text-align: center; cursor: pointer; transition: all 0.2s; background: #f8fafc; }
+        .drop-zone:hover, .drop-zone.dragover { border-color: #3b82f6; background: #eff6ff; }
+        .drop-zone.has-file { border-color: #10b981; background: #f0fdf4; }
+        .drop-zone-icon { font-size: 40px; margin-bottom: 12px; }
+        .drop-zone-text { font-size: 15px; color: #0f172a; font-weight: 500; }
+        .drop-zone-hint { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+        .drop-zone .file-name { font-size: 14px; color: #10b981; font-weight: 600; margin-top: 8px; }
+        .preview { margin-top: 16px; display: none; }
+        .preview img { width: 100%; max-height: 200px; object-fit: contain; border-radius: 8px; background: #f1f5f9; }
+        .preview.show { display: block; }
+        button { width: 100%; padding: 14px; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-top: 16px; }
+        .btn-upload { background: #10b981; color: #fff; }
+        .btn-upload:hover { background: #059669; }
+        .btn-upload:disabled { background: #94a3b8; cursor: not-allowed; }
+        .btn-reset { background: transparent; color: #64748b; border: 1px solid #e2e8f0; margin-top: 8px; }
+        .btn-reset:hover { background: #f8fafc; }
+        .result { margin-top: 20px; display: none; }
+        .result.show { display: block; }
+        .result-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; }
+        .result-box h3 { font-size: 14px; color: #64748b; margin-bottom: 8px; }
+        .result-box .url { color: #3b82f6; word-break: break-all; font-size: 14px; }
+        .result-box pre { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; font-size: 12px; overflow-x: auto; margin-top: 8px; }
+        .status { margin-top: 16px; padding: 12px; border-radius: 8px; font-size: 14px; font-weight: 500; display: none; }
+        .status.success { display: block; background: #f0fdf4; color: #065f46; border: 1px solid #bbf7d0; }
+        .status.error { display: block; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+        .loading { display: none; align-items: center; justify-content: center; gap: 8px; margin-top: 16px; }
+        .loading.show { display: flex; }
+        .spinner { width: 20px; height: 20px; border: 2px solid #e2e8f0; border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.6s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Upload de prueba</h1>
+        <p>Arrastra una imagen o haz clic para seleccionar</p>
+
+        <div class="drop-zone" id="dropZone">
+            <div class="drop-zone-icon">📁</div>
+            <div class="drop-zone-text">Selecciona o arrastra una imagen</div>
+            <div class="drop-zone-hint">JPG, PNG o WebP</div>
+            <div class="file-name" id="fileName"></div>
+        </div>
+        <input type="file" id="fileInput" accept=".jpg,.jpeg,.png,.webp" hidden>
+
+        <div class="preview" id="preview">
+            <img id="previewImg" src="" alt="Preview">
+        </div>
+
+        <button class="btn-upload" id="btnUpload" disabled>Subir archivo</button>
+        <button class="btn-reset" id="btnReset" style="display:none">Limpiar</button>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <span>Subiendo...</span>
+        </div>
+
+        <div class="status" id="status"></div>
+
+        <div class="result" id="result">
+            <div class="result-box">
+                <h3>URL del archivo</h3>
+                <div class="url" id="fileUrl"></div>
+                <h3 style="margin-top:12px">Respuesta del servidor</h3>
+                <pre id="responseJson"></pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileName = document.getElementById('fileName');
+        const preview = document.getElementById('preview');
+        const previewImg = document.getElementById('previewImg');
+        const btnUpload = document.getElementById('btnUpload');
+        const btnReset = document.getElementById('btnReset');
+        const loading = document.getElementById('loading');
+        const status = document.getElementById('status');
+        const result = document.getElementById('result');
+        const fileUrl = document.getElementById('fileUrl');
+        const responseJson = document.getElementById('responseJson');
+
+        let selectedFile = null;
+
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+        });
+
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length) handleFile(fileInput.files[0]);
+        });
+
+        function handleFile(file) {
+            selectedFile = file;
+            fileName.textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+            dropZone.classList.add('has-file');
+            btnUpload.disabled = false;
+            btnReset.style.display = 'block';
+            result.classList.remove('show');
+            status.className = 'status';
+
+            if (file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (e) => { previewImg.src = e.target.result; preview.classList.add('show'); };
+                reader.readAsDataURL(file);
+            } else {
+                preview.classList.remove('show');
+            }
+        }
+
+        btnUpload.addEventListener('click', uploadFile);
+
+        async function uploadFile() {
+            if (!selectedFile) return;
+
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+
+            btnUpload.disabled = true;
+            loading.classList.add('show');
+            status.className = 'status';
+            result.classList.remove('show');
+
+            try {
+                const res = await fetch('/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                loading.classList.remove('show');
+                btnUpload.disabled = false;
+
+                if (data.status === 'success' && data.archivo) {
+                    const baseUrl = window.location.origin;
+                    const url = `${baseUrl}/files/${data.archivo.nombreArchivo}`;
+                    fileUrl.textContent = url;
+                    responseJson.textContent = JSON.stringify(data, null, 2);
+                    result.classList.add('show');
+                    status.className = 'status success';
+                    status.textContent = '✅ Archivo subido correctamente';
+                } else {
+                    status.className = 'status error';
+                    status.textContent = `❌ Error: ${data.message || 'Error desconocido'}`;
+                }
+            } catch (err) {
+                loading.classList.remove('show');
+                btnUpload.disabled = false;
+                status.className = 'status error';
+                status.textContent = `❌ Error de conexión: ${err.message}`;
+            }
+        }
+
+        btnReset.addEventListener('click', () => {
+            selectedFile = null;
+            fileInput.value = '';
+            fileName.textContent = '';
+            dropZone.classList.remove('has-file');
+            preview.classList.remove('show');
+            previewImg.src = '';
+            btnUpload.disabled = true;
+            btnReset.style.display = 'none';
+            result.classList.remove('show');
+            status.className = 'status';
+        });
+    </script>
+</body>
+</html>

@@ -26,7 +26,12 @@ const JSON_DIR = path.join(__dirname, 'json_files');
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'upload-file', version: '2.0' });
+  const indexPath = path.join(__dirname, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.json({ status: 'ok', service: 'upload-file', version: '2.0' });
+  }
 });
 
 app.post(
