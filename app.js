@@ -3,6 +3,7 @@ const express = require("express");
 const fileUpload = require("express-fileupload");
 const path = require("path");
 var cors = require('cors');
+const sharp = require('sharp');
 
 const filesPayloadExists = require('./middleware/filesPayloadExists');
 const fileExtLimiter = require('./middleware/fileExtLimiter');
@@ -34,36 +35,52 @@ app.post('/upload',
     filesPayloadExists,
     fileExtLimiter(['.png', '.jpg', '.jpeg', '.webp']),
     fileSizeLimiter,
-    (req, res) => {
+    async (req, res) => {
         if (!req.files || !req.files.file) {
             return res.status(400).json({ status: "error", message: "No file uploaded" });
         }
 
-        const file = req.files.file;
-        const currentDate = new Date();
-        const year = currentDate.getFullYear();
-        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
-        const day = String(currentDate.getDate()).padStart(2, '0');
-        const hours = String(currentDate.getHours()).padStart(2, '0');
-        const minutes = String(currentDate.getMinutes()).padStart(2, '0');
-        const seconds = String(currentDate.getSeconds()).padStart(2, '0');
+        try {
+            const file = req.files.file;
+            const currentDate = new Date();
+            const year = currentDate.getFullYear();
+            const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+            const day = String(currentDate.getDate()).padStart(2, '0');
+            const hours = String(currentDate.getHours()).padStart(2, '0');
+            const minutes = String(currentDate.getMinutes()).padStart(2, '0');
+            const seconds = String(currentDate.getSeconds()).padStart(2, '0');
 
-        const timestamp = `${year}${month}${day}_${hours}${minutes}${seconds}`;
-        const ext = file.name.split('.').pop();
-        const filename = `${file.name.split('.')[0]}_${timestamp}.${ext}`;
-        const filepath = path.join(FILES_DIR, filename);
+            const timestamp = `${year}${month}${day}_${hours}${minutes}${seconds}`;
+            const ext = file.name.split('.').pop().toLowerCase();
+            const filename = `${file.name.split('.')[0]}_${timestamp}.jpg`;
+            const filepath = path.join(FILES_DIR, filename);
 
-        file.mv(filepath, (err) => {
-            if (err) return res.status(500).json({ status: "error", message: err });
-        });
+            let buffer = file.data;
 
-        return res.json({
-            status: 'success',
-            archivo: {
-                nombreArchivo: filename,
-                urlArchivo: `${URL_BASE}/files/${filename}`
+            if (ext === 'png' || ext === 'webp' || ext === 'jpg' || ext === 'jpeg') {
+                buffer = await sharp(buffer)
+                    .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
+                    .jpeg({ quality: 75, mozjpeg: true })
+                    .toBuffer();
             }
-        });
+
+            fs.writeFileSync(filepath, buffer);
+
+            const originalKB = (file.size / 1024).toFixed(1);
+            const compressedKB = (buffer.length / 1024).toFixed(1);
+
+            return res.json({
+                status: 'success',
+                archivo: {
+                    nombreArchivo: filename,
+                    urlArchivo: `${URL_BASE}/files/${filename}`,
+                    tamañoOriginalKB: parseFloat(originalKB),
+                    tamañoFinalKB: parseFloat(compressedKB)
+                }
+            });
+        } catch (err) {
+            return res.status(500).json({ status: "error", message: err.message });
+        }
     }
 );
 
