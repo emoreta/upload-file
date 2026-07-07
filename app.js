@@ -10,7 +10,7 @@ const fileExtLimiter = require('./middleware/fileExtLimiter');
 const fileSizeLimiter = require('./middleware/fileSizeLimiter');
 
 const PORT = process.env.PORT || 3500;
-const URL_BASE = process.env.URL || `http://localhost:${PORT}`;
+const URL_BASE = process.env.URL || `http://192.168.100.8:${PORT}`;
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -74,8 +74,8 @@ app.post('/upload',
                 archivo: {
                     nombreArchivo: filename,
                     urlArchivo: `${URL_BASE}/files/${filename}`,
-                    tamañoOriginalKB: parseFloat(originalKB),
-                    tamañoFinalKB: parseFloat(compressedKB)
+                    tamanoOriginalKB: parseFloat(originalKB),
+                    tamanoFinalKB: parseFloat(compressedKB)
                 }
             });
         } catch (err) {
