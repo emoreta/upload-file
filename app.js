@@ -162,6 +162,77 @@ app.post('/extract-pdf',
     }
 );
 
+// --- Data store for uploads ---
+const DATA_DIR = path.join(__dirname, 'data');
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+const UPLOADS_FILE = path.join(DATA_DIR, 'uploads.json');
+
+function readUploads() {
+    try {
+        if (!fs.existsSync(UPLOADS_FILE)) return [];
+        const raw = fs.readFileSync(UPLOADS_FILE, 'utf8');
+        return JSON.parse(raw);
+    } catch { return []; }
+}
+
+function writeUploads(data) {
+    fs.writeFileSync(UPLOADS_FILE, JSON.stringify(data, null, 2), 'utf8');
+}
+
+function generateId() {
+    return Date.now().toString(36) + Math.random().toString(36).substring(2, 8);
+}
+
+app.post('/api/upload-metadata', (req, res) => {
+    const { userId, userName, userEmail, fileName, fileUrl, extractedText, type } = req.body || {};
+    if (!fileUrl) {
+        return res.status(400).json({ status: "error", message: "fileUrl es obligatorio." });
+    }
+    try {
+        const uploads = readUploads();
+        const record = {
+            id: generateId(),
+            userId: userId || null,
+            userName: userName || null,
+            userEmail: userEmail || null,
+            fileName: fileName || 'archivo',
+            fileUrl,
+            extractedText: extractedText || '',
+            type: type || 'image',
+            createdAt: new Date().toISOString(),
+        };
+        uploads.unshift(record);
+        writeUploads(uploads);
+        res.json({ status: "success", archivo: record });
+    } catch (err) {
+        res.status(500).json({ status: "error", message: err.message });
+    }
+});
+
+app.get('/api/uploads', (req, res) => {
+    try {
+        const uploads = readUploads();
+        const { userId } = req.query;
+        const filtered = userId ? uploads.filter(u => u.userId === userId) : uploads;
+        res.json({ status: "success", data: filtered });
+    } catch (err) {
+        res.status(500).json({ status: "error", message: err.message });
+    }
+});
+
+app.get('/api/uploads/:id', (req, res) => {
+    try {
+        const uploads = readUploads();
+        const record = uploads.find(u => u.id === req.params.id);
+        if (!record) {
+            return res.status(404).json({ status: "error", message: "Registro no encontrado." });
+        }
+        res.json({ status: "success", archivo: record });
+    } catch (err) {
+        res.status(500).json({ status: "error", message: err.message });
+    }
+});
+
 app.use('/files', express.static(FILES_DIR));
 app.use('/json_files', express.static(path.join(__dirname, 'json_files')));
 
