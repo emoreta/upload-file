@@ -32,7 +32,7 @@ app.get("/", (req, res) => {
 app.post('/upload',
     fileUpload({ createParentPath: true }),
     filesPayloadExists,
-    fileExtLimiter(['.png', '.jpg', '.jpeg', '.mp4', '.mov', '.avi', '.mkv', '.webm', '.webp']),
+    fileExtLimiter(['.png', '.jpg', '.jpeg', '.webp']),
     fileSizeLimiter,
     (req, res) => {
         if (!req.files || !req.files.file) {
