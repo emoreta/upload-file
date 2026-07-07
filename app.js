@@ -105,6 +105,64 @@ app.post('/save-json', (req, res) => {
     }
 });
 
+app.post('/extract-pdf',
+    fileUpload({ createParentPath: true }),
+    filesPayloadExists,
+    fileSizeLimiter,
+    async (req, res) => {
+        if (!req.files || !req.files.file) {
+            return res.status(400).json({ status: "error", message: "No file uploaded" });
+        }
+
+        try {
+            const file = req.files.file;
+            const pdfParse = require('pdf-parse');
+            const data = await pdfParse(file.data);
+
+            const currentDate = new Date();
+            const year = currentDate.getFullYear();
+            const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+            const day = String(currentDate.getDate()).padStart(2, '0');
+            const hours = String(currentDate.getHours()).padStart(2, '0');
+            const minutes = String(currentDate.getMinutes()).padStart(2, '0');
+            const seconds = String(currentDate.getSeconds()).padStart(2, '0');
+            const timestamp = `${year}${month}${day}_${hours}${minutes}${seconds}`;
+
+            const baseName = file.name.replace(/\.pdf$/i, '');
+            const jsonFileName = `${baseName}_${timestamp}.json`;
+            const jsonDir = path.join(__dirname, 'json_files');
+            if (!fs.existsSync(jsonDir)) fs.mkdirSync(jsonDir, { recursive: true });
+            const jsonPath = path.join(jsonDir, jsonFileName);
+
+            const jsonContent = {
+                fileName: file.name,
+                uploadedAt: currentDate.toISOString(),
+                pageCount: data.numpages || 0,
+                text: data.text || '',
+                metadata: {
+                    numpages: data.numpages,
+                    info: data.info || {}
+                }
+            };
+
+            fs.writeFileSync(jsonPath, JSON.stringify(jsonContent, null, 2), 'utf8');
+
+            return res.json({
+                status: 'success',
+                archivo: {
+                    nombreArchivo: jsonFileName,
+                    urlArchivo: `${URL_BASE}/json_files/${jsonFileName}`,
+                    pageCount: data.numpages || 0,
+                    textLength: (data.text || '').length
+                }
+            });
+        } catch (err) {
+            return res.status(500).json({ status: "error", message: err.message });
+        }
+    }
+);
+
 app.use('/files', express.static(FILES_DIR));
+app.use('/json_files', express.static(path.join(__dirname, 'json_files')));
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
