@@ -1,9 +1,8 @@
-require('dotenv').config();
 const fs = require('fs');
-const path = require('path');
-const express = require('express');
-const fileUpload = require('express-fileupload');
-const cors = require('cors');
+const express = require("express");
+const fileUpload = require("express-fileupload");
+const path = require("path");
+var cors = require('cors');
 
 const filesPayloadExists = require('./middleware/filesPayloadExists');
 const fileExtLimiter = require('./middleware/fileExtLimiter');
@@ -13,88 +12,82 @@ const PORT = process.env.PORT || 3500;
 const URL_BASE = process.env.URL || `http://localhost:${PORT}`;
 
 const app = express();
-
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
 app.use(cors({ origin: '*' }));
 
 const FILES_DIR = path.join(__dirname, 'files');
-const JSON_DIR = path.join(__dirname, 'json_files');
+if (!fs.existsSync(FILES_DIR)) fs.mkdirSync(FILES_DIR, { recursive: true });
 
-[FILES_DIR, JSON_DIR].forEach((dir) => {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-});
-
-app.get('/', (req, res) => {
-  const indexPath = path.join(__dirname, 'index.html');
-  if (fs.existsSync(indexPath)) {
-    res.sendFile(indexPath);
-  } else {
-    res.json({ status: 'ok', service: 'upload-file', version: '2.0' });
-  }
-});
-
-app.post(
-  '/upload',
-  fileUpload({ createParentPath: true }),
-  filesPayloadExists,
-  fileExtLimiter(['.png', '.jpg', '.jpeg', '.webp']),
-  fileSizeLimiter,
-  async (req, res, next) => {
-    try {
-      const files = req.files;
-      const uploaded = [];
-
-      for (const key of Object.keys(files)) {
-        const file = files[key];
-        const fileName = `${Date.now()}_${file.name}`;
-        const filePath = path.join(FILES_DIR, fileName);
-        await file.mv(filePath);
-        uploaded.push({ originalName: file.name, nombreArchivo: fileName, size: file.size });
-      }
-
-      res.json({
-        status: 'success',
-        archivo: uploaded[0],
-        message: `Archivo ${uploaded[0].nombreArchivo} subido correctamente.`,
-      });
-    } catch (err) {
-      next(err);
+app.get("/", (req, res) => {
+    const indexPath = path.join(__dirname, "index.html");
+    if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+    } else {
+        res.json({ status: 'ok', service: 'upload-file', version: '2.0' });
     }
-  }
+});
+
+app.post('/upload',
+    fileUpload({ createParentPath: true }),
+    filesPayloadExists,
+    fileExtLimiter(['.png', '.jpg', '.jpeg', '.mp4', '.mov', '.avi', '.mkv', '.webm', '.webp']),
+    fileSizeLimiter,
+    (req, res) => {
+        if (!req.files || !req.files.file) {
+            return res.status(400).json({ status: "error", message: "No file uploaded" });
+        }
+
+        const file = req.files.file;
+        const currentDate = new Date();
+        const year = currentDate.getFullYear();
+        const month = String(currentDate.getMonth() + 1).padStart(2, '0');
+        const day = String(currentDate.getDate()).padStart(2, '0');
+        const hours = String(currentDate.getHours()).padStart(2, '0');
+        const minutes = String(currentDate.getMinutes()).padStart(2, '0');
+        const seconds = String(currentDate.getSeconds()).padStart(2, '0');
+
+        const timestamp = `${year}${month}${day}_${hours}${minutes}${seconds}`;
+        const ext = file.name.split('.').pop();
+        const filename = `${file.name.split('.')[0]}_${timestamp}.${ext}`;
+        const filepath = path.join(FILES_DIR, filename);
+
+        file.mv(filepath, (err) => {
+            if (err) return res.status(500).json({ status: "error", message: err });
+        });
+
+        return res.json({
+            status: 'success',
+            archivo: {
+                nombreArchivo: filename,
+                urlArchivo: `${URL_BASE}/files/${filename}`
+            }
+        });
+    }
 );
 
-app.post('/save-json', (req, res, next) => {
-  const { jsonString, fileName, pathFile } = req.body || {};
+app.post('/save-json', (req, res) => {
+    const { jsonString, fileName, pathFile } = req.body || {};
 
-  if (!jsonString || !fileName) {
-    return res.status(400).json({ status: 'error', message: 'jsonString y fileName son obligatorios.' });
-  }
+    if (!jsonString || !fileName || !pathFile) {
+        return res.status(400).json({ status: "error", message: "jsonString y fileName son obligatorios." });
+    }
 
-  try {
-    const jsonData = JSON.parse(jsonString);
-    const targetDir = pathFile ? path.join(__dirname, pathFile) : JSON_DIR;
-    if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
-
-    const filePath = path.join(targetDir, fileName);
-    fs.writeFileSync(filePath, JSON.stringify(jsonData, null, 2), 'utf8');
-    res.json({
-      status: 'success',
-      url: `${URL_BASE}/${pathFile || 'json_files'}/${fileName}`,
-      message: `Archivo ${fileName} guardado correctamente.`,
-    });
-  } catch (error) {
-    next(error);
-  }
+    try {
+        const jsonData = JSON.parse(jsonString);
+        const filePath = path.join(__dirname, pathFile, `${fileName}`);
+        fs.writeFileSync(filePath, JSON.stringify(jsonData, null, 2), 'utf8');
+        res.json({
+            status: "success",
+            url: `${URL_BASE}/${pathFile}/${fileName}`,
+            message: `Archivo ${fileName} guardado correctamente.`
+        });
+    } catch (error) {
+        res.status(500).json({ status: "error", message: "Error al procesar el JSON.", details: error.message });
+    }
 });
 
 app.use('/files', express.static(FILES_DIR));
 
-app.use((err, req, res, next) => {
-  console.error('[Error]', err.message || err);
-  res.status(500).json({ status: 'error', message: err.message || 'Error interno del servidor.' });
-});
-
-app.listen(PORT, () => {
-  console.log(`Servidor corriendo en ${URL_BASE}`);
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
