@@ -4,19 +4,43 @@ const fileUpload = require("express-fileupload");
 const path = require("path");
 var cors = require('cors');
 const sharp = require('sharp');
+const helmet = require('helmet');
+const env = require('./src/config/env');
+const { ping } = require('./src/config/database');
+const { migrate } = require('./src/database/migrate');
+const { adminRoutes } = require('./src/routes/adminRoutes');
+const { documentRoutes } = require('./src/routes/documentRoutes');
 
 const filesPayloadExists = require('./middleware/filesPayloadExists');
 const fileExtLimiter = require('./middleware/fileExtLimiter');
 const fileSizeLimiter = require('./middleware/fileSizeLimiter');
 
-const PORT = process.env.PORT || 3500;
-const URL_BASE = process.env.URL || `http://192.168.100.8:${PORT}`;
+const PORT = env.port;
+const URL_BASE = env.publicUrl;
 
 const app = express();
+app.set('trust proxy', 1);
+app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-app.use(cors({ origin: '*' }));
+app.use(cors({
+    origin(origin, callback) {
+        let serviceOrigin = null;
+        try { serviceOrigin = new URL(env.publicUrl).origin; } catch {}
+        if (!env.flags.v1Enabled || !origin || origin === serviceOrigin || env.corsOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+        return callback(Object.assign(new Error('Origen no permitido'), { status: 403 }));
+    },
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-admin-key', 'x-file-key', 'x-file-timestamp', 'x-file-nonce', 'x-file-signature', 'x-file-content-sha256'],
+}));
+
+if (env.flags.v1Enabled) {
+    app.use('/v1/admin', adminRoutes);
+    app.use('/v1', documentRoutes);
+    app.use('/admin', express.static(path.join(__dirname, 'admin')));
+}
 
 const FILES_DIR = path.join(__dirname, 'files');
 if (!fs.existsSync(FILES_DIR)) fs.mkdirSync(FILES_DIR, { recursive: true });
@@ -24,10 +48,26 @@ if (!fs.existsSync(FILES_DIR)) fs.mkdirSync(FILES_DIR, { recursive: true });
 app.get("/", (req, res) => {
     const indexPath = path.join(__dirname, "index.html");
     if (fs.existsSync(indexPath)) {
+        res.set('X-File-Service-Version', env.flags.v1Enabled ? '3.0' : '2.0-legacy');
         res.sendFile(indexPath);
     } else {
-        res.json({ status: 'ok', service: 'upload-file', version: '2.0' });
+        res.json({ status: 'ok', service: 'upload-file', version: env.flags.v1Enabled ? '3.0' : '2.0' });
     }
+});
+
+app.get('/health/live', (_req, res) => res.json({ status: 'ok' }));
+app.get('/health/ready', async (_req, res) => {
+    if (!env.flags.v1Enabled) return res.json({ status: 'ok', mode: 'legacy' });
+    try { await ping(); res.json({ status: 'ok', database: 'ready' }); }
+    catch { res.status(503).json({ status: 'error', database: 'unavailable' }); }
+});
+
+app.use((req, res, next) => {
+    const legacyPaths = ['/upload', '/save-json', '/extract-pdf', '/api/upload-metadata', '/api/uploads'];
+    if (!env.flags.legacyEnabled && legacyPaths.some((item) => req.path === item || req.path.startsWith(item + '/'))) {
+        return res.status(410).json({ message: 'Endpoint legado deshabilitado' });
+    }
+    next();
 });
 
 app.post('/upload',
@@ -93,7 +133,13 @@ app.post('/save-json', (req, res) => {
 
     try {
         const jsonData = JSON.parse(jsonString);
-        const filePath = path.join(__dirname, pathFile, `${fileName}`);
+        const rootPath = path.resolve(__dirname);
+        const filePath = path.resolve(rootPath, String(pathFile), String(fileName));
+        const safePrefix = rootPath.endsWith(path.sep) ? rootPath : rootPath + path.sep;
+        if (!filePath.startsWith(safePrefix)) {
+            return res.status(400).json({ status: 'error', message: 'Ruta no permitida.' });
+        }
+        fs.mkdirSync(path.dirname(filePath), { recursive: true });
         fs.writeFileSync(filePath, JSON.stringify(jsonData, null, 2), 'utf8');
         res.json({
             status: "success",
@@ -236,4 +282,27 @@ app.get('/api/uploads/:id', (req, res) => {
 app.use('/files', express.static(FILES_DIR));
 app.use('/json_files', express.static(path.join(__dirname, 'json_files')));
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.use((error, _req, res, _next) => {
+    const status = error.status || (error.code === 'LIMIT_FILE_SIZE' ? 413 : 500);
+    if (status >= 500) console.error('File Service request failed', {
+        errorName: error.name,
+        errorCode: error.code,
+        errorMessage: error.message,
+    });
+    res.status(status).json({ message: status >= 500 ? 'Error interno del servicio de archivos' : error.message });
+});
+
+async function start() {
+    try {
+        if (env.flags.v1Enabled) {
+            await ping();
+            if (env.flags.migrateOnStart) await migrate();
+        }
+        app.listen(PORT, () => console.log(`File Service running on port ${PORT} (${env.flags.v1Enabled ? 'document-v1' : 'legacy'} mode)`));
+    } catch (error) {
+        console.error(`File Service startup failed: ${error.message}`);
+        process.exitCode = 1;
+    }
+}
+
+start();

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Guaba File Service</title>
+  <link rel="stylesheet" href="/admin/styles.css">
+</head>
+<body>
+  <section id="login" class="login-shell">
+    <form id="login-form" class="card login-card">
+      <div class="brand-mark">GF</div>
+      <p class="eyebrow">Guaba infrastructure</p>
+      <h1>Gestor documental</h1>
+      <p class="muted">Administra aplicaciones, pol?ticas y archivos desde un solo lugar.</p>
+      <label>Llave administrativa<input id="admin-key" type="password" autocomplete="current-password" required></label>
+      <button class="primary" type="submit">Ingresar</button>
+      <p id="login-error" class="error"></p>
+    </form>
+  </section>
+
+  <div id="workspace" class="workspace hidden">
+    <aside>
+      <div class="brand"><span class="brand-mark small">GF</span><div><strong>Guaba Files</strong><small>Document service</small></div></div>
+      <nav>
+        <button data-view="overview" class="active">Resumen</button>
+        <button data-view="applications">Aplicaciones</button>
+        <button data-view="documents">Documentos</button>
+        <button data-view="audit">Auditor?a</button>
+      </nav>
+      <button id="logout" class="ghost">Cerrar sesi?n</button>
+    </aside>
+    <main>
+      <header><div><p class="eyebrow">Consola administrativa</p><h1 id="page-title">Resumen</h1></div><span id="status" class="status">Conectado</span></header>
+
+      <section id="view-overview" class="view">
+        <div id="summary" class="metrics"></div>
+        <div class="card panel"><div class="panel-title"><div><h2>Actividad reciente</h2><p>?ltimos documentos registrados</p></div></div><div id="recent-documents"></div></div>
+      </section>
+
+      <section id="view-applications" class="view hidden">
+        <div class="panel-title"><div><h2>Aplicaciones</h2><p>Clientes aislados por credenciales y pol?ticas.</p></div><button id="new-app" class="primary">Nueva aplicaci?n</button></div>
+        <div id="applications" class="card table-wrap"></div>
+      </section>
+
+      <section id="view-documents" class="view hidden">
+        <div class="panel-title"><div><h2>Cat?logo documental</h2><p>Archivos, propietarios y versiones actuales.</p></div><button class="secondary" data-refresh="documents">Actualizar</button></div>
+        <div id="documents" class="card table-wrap"></div>
+      </section>
+
+      <section id="view-audit" class="view hidden">
+        <div class="panel-title"><div><h2>Auditor?a</h2><p>Acciones relevantes de aplicaciones y administradores.</p></div><button class="secondary" data-refresh="audit">Actualizar</button></div>
+        <div id="audit" class="card table-wrap"></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="app-dialog">
+    <form id="app-form" method="dialog">
+      <div class="panel-title"><div><p class="eyebrow">Nuevo cliente</p><h2>Crear aplicaci?n</h2></div><button value="cancel" class="icon-button">?</button></div>
+      <label>Nombre<input name="name" required placeholder="Guaba Market"></label>
+      <label>C?digo<input name="code" required pattern="[A-Za-z0-9_-]{3,80}" placeholder="GUABA_MARKET_STAGING"></label>
+      <label>Entorno<select name="environment"><option value="development">Desarrollo</option><option value="staging">Staging</option><option value="production">Producci?n</option></select></label>
+      <p class="muted">Se crear?n pol?ticas seguras para im?genes, documentos, comprobantes y archivos fiscales.</p>
+      <div class="actions"><button value="cancel" class="secondary">Cancelar</button><button id="create-app" value="default" class="primary">Crear</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="secret-dialog">
+    <div class="panel-title"><div><p class="eyebrow">Credencial creada</p><h2>Gu?rdala ahora</h2></div></div>
+    <p class="muted">El secreto no volver? a mostrarse. Debe vivir solo en el backend consumidor.</p>
+    <label>Key ID<div class="copy-row"><code id="created-key"></code><button data-copy="created-key">Copiar</button></div></label>
+    <label>Secret<div class="copy-row"><code id="created-secret"></code><button data-copy="created-secret">Copiar</button></div></label>
+    <div class="actions"><button id="close-secret" class="primary">Entendido</button></div>
+  </dialog>
+  <script src="/admin/app.js"></script>
+</body>
+</html>

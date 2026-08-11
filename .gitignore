@@ -29,6 +29,14 @@ yarn-error.log*
 # local env files
 .env
 .env*.local
+.env.*
+!.env.example
+
+# runtime document storage
+/storage/
+/files/*
+/json_files/*
+/data/*
 
 # vercel
 .vercel

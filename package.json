@@ -4,7 +4,12 @@
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
-    "dev": "node --watch app.js"
+    "dev": "node --watch app.js",
+    "db:migrate": "node scripts/migrate.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20 <23"
   },
   "author": "",
   "license": "ISC",
@@ -13,6 +18,7 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "express-fileupload": "^1.5.1",
+    "helmet": "^8.1.0",
     "mysql2": "^3.22.5",
     "pdf-parse": "^1.1.1",
     "sharp": "^0.35.3"
