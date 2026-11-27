@@ -57,6 +57,10 @@ La firma es el HMAC-SHA256 hexadecimal de esa cadena.
 4. Se crea el documento (o una versi?n nueva) y se devuelve su identificador estable.
 5. Para documentos privados, el backend firma `POST /v1/documents/:id/download-sessions`.
 
+## Eliminaci?n segura
+
+`DELETE /v1/documents/:id` realiza un borrado l?gico autenticado por la aplicaci?n. El documento deja de estar disponible, se invalidan las sesiones de descarga, se revocan cargas pendientes y se registra `DOCUMENT_DELETED` en auditor?a. El archivo f?sico se conserva para retenci?n y recuperaci?n administrativa futura.
+
 ## Spaceship
 
 Configure todas las variables del ejemplo en la aplicaci?n Node. Para datos persistentes use una ruta absoluta fuera del directorio reemplazado por cada despliegue, por ejemplo `/home/CPANEL_USER/guaba-file-storage`.

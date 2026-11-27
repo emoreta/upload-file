@@ -37,15 +37,63 @@ router.get('/summary', async (_req, res, next) => {
 router.get('/documents', async (req, res, next) => {
   try {
     const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+    const statusFilter = req.query.includeDeleted === 'true' ? '' : "WHERE d.status='active'";
     const [rows] = await getPool().query(
       `SELECT d.id, d.title, d.purpose, d.visibility, d.owner_ref, d.status, d.updated_at,
        a.code application_code, v.original_name, v.mime_type, v.size_bytes, v.sha256, v.version_number
        FROM document d JOIN file_application a ON a.id=d.application_id
        LEFT JOIN document_version v ON v.document_id=d.id AND v.version_number=d.current_version_number
-       ORDER BY d.updated_at DESC LIMIT ?`, [limit],
+       ${statusFilter} ORDER BY d.updated_at DESC LIMIT ?`, [limit],
     );
     res.json({ data: rows });
   } catch (error) { next(error); }
+});
+
+router.delete('/documents/:id', async (req, res, next) => {
+  const connection = await getPool().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query(
+      `SELECT d.id, d.application_id, d.title, d.status, a.code application_code
+       FROM document d JOIN file_application a ON a.id=d.application_id
+       WHERE d.id=? LIMIT 1 FOR UPDATE`,
+      [req.params.id],
+    );
+    const document = rows[0];
+    if (!document) {
+      await connection.rollback();
+      return res.status(404).json({ message: 'Documento no encontrado' });
+    }
+    if (document.status === 'deleted') {
+      await connection.rollback();
+      return res.json({ message: 'El documento ya estaba eliminado', document: { id: document.id, status: 'deleted' }, reused: true });
+    }
+    await connection.query(
+      "UPDATE document SET status='deleted', deleted_at=CURRENT_TIMESTAMP(3), updated_at=CURRENT_TIMESTAMP(3) WHERE id=?",
+      [document.id],
+    );
+    await connection.query(
+      `UPDATE file_download_session ds JOIN document_version v ON v.id=ds.version_id
+       SET ds.consumed_at=COALESCE(ds.consumed_at, CURRENT_TIMESTAMP(3))
+       WHERE v.document_id=?`,
+      [document.id],
+    );
+    await connection.query(
+      "UPDATE file_upload_session SET status='revoked' WHERE document_id=? AND status='pending'",
+      [document.id],
+    );
+    await connection.commit();
+    await audit(req, 'DOCUMENT_DELETED', {
+      applicationId: document.application_id,
+      documentId: document.id,
+      actorRef: 'admin',
+      details: { title: document.title, applicationCode: document.application_code, deletion: 'soft' },
+    }).catch((auditError) => console.error('Admin document deletion audit failed', { errorMessage: auditError.message }));
+    res.json({ message: 'Documento eliminado', document: { id: document.id, status: 'deleted' }, reused: false });
+  } catch (error) {
+    await connection.rollback();
+    next(error);
+  } finally { connection.release(); }
 });
 
 router.get('/audit', async (req, res, next) => {

@@ -54,10 +54,17 @@ async function loadSummary() {
   $('#recent-documents').innerHTML = renderDocuments(documents);
 }
 
-function renderDocuments(rows) {
+function renderDocuments(rows, includeActions = false) {
+  const headers = ['Documento', 'Aplicaci?n', 'Prop?sito', 'Tipo', 'Tama?o', 'Estado', 'Actualizado'];
+  if (includeActions) headers.push('Acci?n');
   return table(
-    ['Documento', 'Aplicaci?n', 'Prop?sito', 'Tipo', 'Tama?o', 'Actualizado'],
-    rows.map((row) => `<tr><td>${escapeHtml(row.title)}</td><td>${escapeHtml(row.application_code)}</td><td><span class="badge ${row.visibility}">${escapeHtml(row.purpose)}</span></td><td>${escapeHtml(row.mime_type || '?')}</td><td>${bytes(row.size_bytes)}</td><td>${date(row.updated_at)}</td></tr>`),
+    headers,
+    rows.map((row) => {
+      const action = includeActions
+        ? `<td>${row.status === 'deleted' ? '<span class="muted">Eliminado</span>' : `<button class="secondary" data-delete-document="${escapeHtml(row.id)}">Eliminar</button>`}</td>`
+        : '';
+      return `<tr><td>${escapeHtml(row.title)}</td><td>${escapeHtml(row.application_code)}</td><td><span class="badge ${row.visibility}">${escapeHtml(row.purpose)}</span></td><td>${escapeHtml(row.mime_type || '?')}</td><td>${bytes(row.size_bytes)}</td><td><span class="badge">${escapeHtml(row.status)}</span></td><td>${date(row.updated_at)}</td>${action}</tr>`;
+    }),
   );
 }
 
@@ -70,8 +77,8 @@ async function loadApplications() {
 }
 
 async function loadDocuments() {
-  const { data } = await api('/documents?limit=100');
-  $('#documents').innerHTML = renderDocuments(data);
+  const { data } = await api('/documents?limit=100&includeDeleted=true');
+  $('#documents').innerHTML = renderDocuments(data, true);
 }
 
 async function loadAudit() {
@@ -172,6 +179,20 @@ $('#applications').addEventListener('click', async (event) => {
   } catch (error) {
     alert(error.message);
   } finally {
+    button.disabled = false;
+  }
+});
+
+$('#documents').addEventListener('click', async (event) => {
+  const button = event.target.closest('[data-delete-document]');
+  if (!button) return;
+  if (!confirm('El documento dejará de estar disponible. ¿Deseas continuar?')) return;
+  button.disabled = true;
+  try {
+    await api(`/documents/${button.dataset.deleteDocument}`, { method: 'DELETE' });
+    await Promise.all([loadDocuments(), loadSummary()]);
+  } catch (error) {
+    alert(error.message);
     button.disabled = false;
   }
 });

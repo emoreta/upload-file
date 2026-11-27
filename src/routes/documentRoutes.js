@@ -265,6 +265,50 @@ router.get('/documents/:id', applicationAuth, async (req, res, next) => {
     res.json({ data: rows[0] });
   } catch (error) { next(error); }
 });
+
+router.delete('/documents/:id', applicationAuth, async (req, res, next) => {
+  const connection = await getPool().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query(
+      'SELECT id, title, status FROM document WHERE id=? AND application_id=? LIMIT 1 FOR UPDATE',
+      [req.params.id, req.fileApplication.id],
+    );
+    const document = rows[0];
+    if (!document) {
+      await connection.rollback();
+      return res.status(404).json({ message: 'Documento no encontrado' });
+    }
+    if (document.status === 'deleted') {
+      await connection.rollback();
+      return res.json({ message: 'El documento ya estaba eliminado', document: { id: document.id, status: 'deleted' }, reused: true });
+    }
+    await connection.query(
+      "UPDATE document SET status='deleted', deleted_at=CURRENT_TIMESTAMP(3), updated_at=CURRENT_TIMESTAMP(3) WHERE id=?",
+      [document.id],
+    );
+    await connection.query(
+      `UPDATE file_download_session ds JOIN document_version v ON v.id=ds.version_id
+       SET ds.consumed_at=COALESCE(ds.consumed_at, CURRENT_TIMESTAMP(3))
+       WHERE v.document_id=?`,
+      [document.id],
+    );
+    await connection.query(
+      "UPDATE file_upload_session SET status='revoked' WHERE document_id=? AND status='pending'",
+      [document.id],
+    );
+    await connection.commit();
+    await audit(req, 'DOCUMENT_DELETED', {
+      documentId: document.id,
+      details: { title: document.title, deletion: 'soft' },
+    }).catch((auditError) => console.error('Document deletion audit failed', { errorMessage: auditError.message }));
+    res.json({ message: 'Documento eliminado', document: { id: document.id, status: 'deleted' }, reused: false });
+  } catch (error) {
+    await connection.rollback();
+    next(error);
+  } finally { connection.release(); }
+});
+
 router.post('/documents/:id/download-sessions', applicationAuth, async (req, res, next) => {
   try {
     const [rows] = await getPool().query(
